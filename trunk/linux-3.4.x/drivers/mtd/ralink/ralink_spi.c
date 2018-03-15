@@ -144,14 +144,14 @@ int ranfc_debug = 1;
 u32 ra_inl(u32 addr)
 {
 	u32 retval = _ra_inl(addr);
-	printk("%s(%x) => %x \n", __func__, addr, retval);
+	printk(KERN_INFO "%s(%x) => %x\n", __func__, addr, retval);
 	return retval;
 }
 
 u32 ra_outl(u32 addr, u32 val)
 {
 	_ra_outl(addr, val);
-	printk("%s(%x, %x) \n", __func__, addr, val);
+	printk(KERN_INFO "%s(%x, %x)\n", __func__, addr, val);
 	return val;
 }
 
@@ -176,7 +176,7 @@ static int spic_busy_wait(void)
 			return 0;
 	} while (spi_wait_nsec >> 1);
 
-	printk("%s: fail \n", __func__);
+	printk(KERN_ERR "%s: SPI wait timed out\n", __func__);
 	return -1;
 }
 
@@ -200,7 +200,7 @@ static int spic_transfer(const u8 *cmd, int n_cmd, u8 *buf, int n_buf, int flag)
 {
 	int retval = -1;
 
-	ra_dbg("cmd(%x): %x %x %x %x , buf:%x len:%x, flag:%s \n",
+	ra_dbg("command(%x): %x %x %x %x, buffer: %x, length: %x, mode: %s\n",
 			n_cmd, cmd[0], cmd[1], cmd[2], cmd[3],
 			(buf)? (*buf) : 0, n_buf,
 			(flag == SPIC_READ_BYTES)? "read" : "write");
@@ -294,7 +294,7 @@ int spic_init(void)
 
 	spi_wait_nsec = (8 * 1000 / (128 / (CFG_CLK_DIV+1)) ) >> 1;
 
-	printk("Ralink SPI flash driver, SPI clock: %dMHz\n", (get_surfboard_sysclk() / 1000000) >> (CFG_CLK_DIV+1));
+	printk(KERN_INFO "Ralink SPI flash driver, SPI clock: %dMHz\n", (get_surfboard_sysclk() / 1000000) >> (CFG_CLK_DIV+1));
 
 	return 0;
 }
@@ -318,7 +318,7 @@ static struct chip_info chips_data [] = {
 	{ "S25FL032P",		0x01, 0x02154D00, 64 * 1024, 64,  0 },
 	{ "S25FL064P",		0x01, 0x02164D00, 64 * 1024, 128, 0 },
 	{ "S25FL128P",		0x01, 0x20180301, 64 * 1024, 256, 0 },
-	{ "S25FL128S",		0x01, 0x20184D01, 64 * 1024, 256, 0 },
+	{ "S25FL129P",		0x01, 0x20184D01, 64 * 1024, 256, 0 },
 	{ "S25FL256S",		0x01, 0x02194D01, 64 * 1024, 512, 1 },
 
 	{ "S25FL116K",		0x01, 0x40150140, 64 * 1024, 32,  0 },
@@ -356,6 +356,7 @@ static struct chip_info chips_data [] = {
 	{ "GD25Q64CSIG",	0xc8, 0x4017c840, 64 * 1024, 128, 0 },
 	{ "GD25Q128C",		0xc8, 0x40180000, 64 * 1024, 256, 0 },
 	{ "GD25Q128CSIG",	0xc8, 0x4018c840, 64 * 1024, 256, 0 },
+	{ "GD25Q256CSIG",	0xc8, 0x4019c840, 64 * 1024, 512, 1 },
 
 	{ "W25X32VS",		0xef, 0x30160000, 64 * 1024, 64,  0 },
 	{ "W25Q32BV",		0xef, 0x40160000, 64 * 1024, 64,  0 },
@@ -510,7 +511,7 @@ static int raspi_set_quad(void)
 
 err_end:
 	if (retval == -1)
-		printk("raspi_set_quad error\n");
+		printk(KERN_ERR "SPI quad mode setup failed");
 
 	return retval;
 }
@@ -528,7 +529,7 @@ static int raspi_read_devid(u8 *rxbuf, int n_rx)
 	retval = spic_read(&code, 1, rxbuf, n_rx);
 #endif
 	if (retval != n_rx) {
-		printk("%s: ret: %x\n", __func__, retval);
+		printk(KERN_ERR "%s: SPI device ID read failed: %x\n", __func__, retval);
 		return retval;
 	}
 	return retval;
@@ -586,7 +587,7 @@ static int raspi_read_sr(u8 *val)
 	retval = spic_read(&code, 1, val, 1);
 #endif
 	if (retval != 1) {
-		printk("%s: ret: %x\n", __func__, retval);
+		printk(KERN_ERR "%s: SPI read failed: %x\n", __func__, retval);
 		return -EIO;
 	}
 	return 0;
@@ -606,7 +607,7 @@ static int raspi_write_sr(u8 *val)
 	retval = spic_write(&code, 1, val, 1);
 #endif
 	if (retval != 1) {
-		printk("%s: ret: %x\n", __func__, retval);
+		printk(KERN_ERR "%s: SPI write failed: %x\n", __func__, retval);
 		return -EIO;
 	}
 	return 0;
@@ -632,7 +633,7 @@ static int raspi_wait_ready(int sleep_ms)
 		udelay(5);
 	}
 
-	printk("%s: read_sr fail: %x\n", __func__, sr);
+	printk(KERN_ERR "%s: failed to read SPI status: %x\n", __func__, sr);
 	return -EIO;
 }
 
@@ -652,7 +653,7 @@ static int raspi_wait_sleep_ready(int sleep_ms)
 		usleep(50);
 	}
 
-	printk("%s: read_sr fail: %x\n", __func__, sr);
+	printk(KERN_ERR "%s: failed to read SPI status: %x\n", __func__, sr);
 	return -EIO;
 }
 
@@ -677,7 +678,7 @@ static int raspi_4byte_mode(int enable)
 		raspi_write_rg(&br, OPCODE_BRWR);
 		raspi_read_rg(&br_cfn, OPCODE_BRRD);
 		if (br_cfn != br) {
-			printk("%s: 4B mode set failed!\n", __func__);
+			printk(KERN_ERR "%s: 4B mode set failed\n", __func__);
 			return -1;
 		}
 	}
@@ -699,7 +700,7 @@ static int raspi_4byte_mode(int enable)
 		}
 		
 		if (retval != 0) {
-			printk("%s: 4B mode set failed!\n", __func__);
+			printk(KERN_ERR "%s: 4B mode set failed\n", __func__);
 			return -1;
 		}
 	}
@@ -762,7 +763,7 @@ static void raspi_unprotect(void)
 	u8 sr_bp, sr = 0;
 
 	if (raspi_read_sr(&sr) < 0) {
-		printk("%s: read_sr fail: %x\n", __func__, sr);
+		printk(KERN_ERR "%s: SPI read failed: %x\n", __func__, sr);
 		return;
 	}
 
@@ -1107,7 +1108,7 @@ static int ramtd_write(struct mtd_info *mtd, loff_t to, size_t len,
 			
 			if (rc < page_size) {
 				exit_code = -EIO;
-				printk("%s: rc:%x return:%x page_size:%x \n", 
+				printk(KERN_ERR "%s: rc: %x, return: %x, page size: %x\n",
 				       __func__, rc, rc, page_size);
 				goto exit_mtd_write;
 			}
@@ -1149,7 +1150,7 @@ struct chip_info *chip_prob(void)
 	raspi_read_devid(buf, 5);
 	jedec = (u32)((u32)(buf[1] << 24) | ((u32)buf[2] << 16) | ((u32)buf[3] << 8) | (u32)buf[4]);
 
-	ra_dbg("deice id : %x %x %x %x %x (%x)\n", buf[0], buf[1], buf[2], buf[3], buf[4], jedec);
+	ra_dbg("device ID: %x %x %x %x %x (%x)\n", buf[0], buf[1], buf[2], buf[3], buf[4], jedec);
 
 	table_size = ARRAY_SIZE(chips_data);
 
@@ -1161,8 +1162,7 @@ struct chip_info *chip_prob(void)
 		}
 	}
 
-	printk(KERN_WARNING "unrecognized SPI chip ID: %x (%x), please update the SPI driver!\n",
-		buf[0], jedec);
+	printk(KERN_WARNING "Warning: unrecognized SPI chip ID: %x (%x), please update the SPI driver\n", buf[0], jedec);
 
 	/* use last stub item */
 	return &chips_data[table_size - 1];
@@ -1222,7 +1222,7 @@ static int __init raspi_init(void)
 	raspi_drive_strength();
 #endif
 
-	printk("SPI flash chip: %s (%02x %04x) (%u Kbytes)\n",
+	printk(KERN_INFO "SPI flash chip: %s (%02x %04x) (%u Kbytes)\n",
 		chip->name, chip->id, chip->jedec_id, (uint32_t)flash->mtd.size / 1024);
 
 #if defined (SPI_DEBUG)

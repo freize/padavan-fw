@@ -373,7 +373,7 @@ int add_mtd_device(struct mtd_info *mtd)
 #if defined (CONFIG_RT2880_ROOTFS_IN_FLASH)
 	// set RootFS automatically when find it
 	if (!strcmp(mtd->name, "RootFS") && ROOT_DEV == 0) {
-		pr_notice("mtd: device %d (%s) set to be root filesystem\n",
+		pr_info("mtd: device %d (%s) set to be root filesystem\n",
 			mtd->index, mtd->name);
 		ROOT_DEV = MKDEV(MTD_BLOCK_MAJOR, mtd->index);
 	}

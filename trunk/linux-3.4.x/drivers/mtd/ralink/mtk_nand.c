@@ -30,6 +30,10 @@
 #include "ralink-nand-map.h"
 #endif
 
+#if defined (CONFIG_JFFS2_FS) || defined (CONFIG_JFFS2_FS_MODULE)
+#define JFFS2_WORKAROUND
+#endif
+
 #if defined (CONFIG_MTD_UBI) || defined (CONFIG_MTD_UBI_MODULE)
 #define UBIFS_ECC_0_PATCH
 #if defined (CONFIG_MTD_NAND_USE_UBI_PART)
@@ -114,11 +118,16 @@ static const flashdev_info gen_FlashTable[]= {
 	{"S34ML02G200TF",   0x01DA, 0x909546, 5, 8,  256, 128, 2048, 112, 0x00844333, 0},
 	{"S34ML04G200TF",   0x01DC, 0x909556, 5, 8,  512, 128, 2048, 112, 0x00844333, 0},
 
+	/* Winbond */
+	{"W29N01HV",        0xEFF1, 0x009500, 4, 8,  128, 128, 2048,  64, 0x00844333, 0},
+	{"W29N02GV",        0xEFDA, 0x909504, 5, 8,  256, 128, 2048,  64, 0x00844333, 0},
+	{"W29N04GV",        0xEFDC, 0x909554, 5, 8,  512, 128, 2048,  64, 0x00844333, 0},
+
 	/* Samsung */
 	{"K9K8G8000",       0xECD3, 0x519558, 5, 8, 1024, 128, 2048,  64, 0x00044333, 0},
 
 	/* Toshiba */
-	{"TC58NVG3S0F",     0x98D3, 0x902676, 5, 8, 1024, 256, 4096, 224, 0x00C25332, 0},
+	{"TC58NVG3S0F",     0x98D3, 0x902676, 5, 8, 1024, 256, 4096, 224, 0x00C45333, 0},
 
 	/* Micron */
 	{"MT29F1G08ABAEA",  0x2CF1, 0x809504, 4, 8,  128, 128, 2048,  64, 0x00844333, 0},
@@ -134,12 +143,12 @@ static bool get_nand_device_info_table(u16 id, u32 ext_id)
 	for (index = 0; gen_FlashTable[index].id != 0; index++) {
 		if (id == gen_FlashTable[index].id && ext_id == gen_FlashTable[index].ext_id) {
 			memcpy(&nand_devinfo, &gen_FlashTable[index], sizeof(flashdev_info));
-			printk("%s: NAND chip found in MTK table: %s\n", MTK_NAND_MODULE_TEXT, nand_devinfo.devicename);
+			printk(KERN_INFO "%s: NAND chip found in the MTK table: %s\n", MTK_NAND_MODULE_TEXT, nand_devinfo.devicename);
 			return true;
 		}
 	}
 
-	printk(KERN_WARNING "%s: NAND chip with device ID %x is not found in MTK table!\n", MTK_NAND_MODULE_TEXT, id);
+	printk(KERN_WARNING "%s: NAND chip with device ID %x is not found in the MTK table\n", MTK_NAND_MODULE_TEXT, id);
 	return false;
 }
 
@@ -188,7 +197,7 @@ static int mtk_nand_init_size(struct mtd_info *mtd, struct nand_chip *chip, u8 *
 	u16 id;
 	u32 id_ext;
 
-	printk("%s: NAND ID [%02X %02X, %02X %02X %02X %02X]\n",
+	printk(KERN_INFO "%s: NAND ID [%02X %02X, %02X %02X %02X %02X]\n",
 		MTK_NAND_MODULE_TEXT, id_data[0], id_data[1], id_data[2], id_data[3], id_data[4], id_data[5]);
 
 	id = ((u16)id_data[0] << 8) | id_data[1];
@@ -1794,6 +1803,7 @@ static int mtk_nand_write_oob_raw(struct mtd_info *mtd, const uint8_t * buf, int
 	return 0;
 }
 
+#if !defined (JFFS2_WORKAROUND)
 static int mtk_nand_write_oob_hw(struct mtd_info *mtd, struct nand_chip *chip, int page)
 {
 	int i, iter;
@@ -1867,6 +1877,7 @@ static int mtk_nand_write_oob(struct mtd_info *mtd, struct nand_chip *chip, int 
 
 	return 0;
 }
+#endif // CONFIG_MTD_NAND_MTK_JFFS2_WORKAROUND
 
 int mtk_nand_block_markbad_hw(struct mtd_info *mtd, loff_t offset)
 {
@@ -2194,7 +2205,7 @@ static int load_fact_bbt(struct mtd_info *mtd)
 	for (i = total_block - 1; i >= (total_block - FACT_BBT_BLOCK_NUM); i--) {
 		page = i << (chip->phys_erase_shift - chip->page_shift);
 		if (read_fact_bbt(mtd, page, fact_bbt, fact_bbt_size) == 0) {
-			printk("%s: success load FACT_BBT from block %d\n", MTK_NAND_MODULE_TEXT, i);
+			printk(KERN_INFO "%s: success load FACT_BBT from block %d\n", MTK_NAND_MODULE_TEXT, i);
 			ret = 0;
 			break;
 		}
@@ -2293,7 +2304,11 @@ static int mtk_nand_probe(struct platform_device *pdev)
 	chip->ecc.read_page = mtk_nand_read_page_hwecc;
 	chip->ecc.write_page = mtk_nand_write_page_hwecc;
 	chip->ecc.read_oob = mtk_nand_read_oob;
+#if defined (JFFS2_WORKAROUND)
+	chip->ecc.write_oob = NULL;
+#else
 	chip->ecc.write_oob = mtk_nand_write_oob;
+#endif
 
 	/* skip bbt scan (scan later) */
 	chip->options = NAND_SKIP_BBTSCAN;

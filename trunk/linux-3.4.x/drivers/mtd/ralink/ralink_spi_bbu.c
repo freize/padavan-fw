@@ -117,14 +117,14 @@ extern u32 get_surfboard_sysclk(void);
 u32 ra_inl(u32 addr)
 {
 	u32 retval = _ra_inl(addr);
-	printk("%s(%x) => %x \n", __func__, addr, retval);
+	printk(KERN_INFO "%s(%x) => %x \n", __func__, addr, retval);
 	return retval;
 }
 
 u32 ra_outl(u32 addr, u32 val)
 {
 	_ra_outl(addr, val);
-	printk("%s(%x, %x) \n", __func__, addr, val);
+	printk(KERN_INFO "%s(%x, %x) \n", __func__, addr, val);
 	return val;
 }
 #endif // SPI_DEBUG //
@@ -153,7 +153,7 @@ static int bbu_spic_busy_wait(void)
 		udelay(1);
 	} while (--n > 0);
 
-	printk("%s: fail \n", __func__);
+	printk(KERN_ERR "%s: wait failed\n", __func__);
 	return -1;
 }
 
@@ -210,7 +210,7 @@ static struct chip_info chips_data [] = {
 	{ "S25FL032P",		0x01, 0x02154D00, 64 * 1024, 64,  0 },
 	{ "S25FL064P",		0x01, 0x02164D00, 64 * 1024, 128, 0 },
 	{ "S25FL128P",		0x01, 0x20180301, 64 * 1024, 256, 0 },
-	{ "S25FL128S",		0x01, 0x20184D01, 64 * 1024, 256, 0 },
+	{ "S25FL129P",		0x01, 0x20184D01, 64 * 1024, 256, 0 },
 	{ "S25FL256S",		0x01, 0x02194D01, 64 * 1024, 512, 1 },
 
 	{ "S25FL116K",		0x01, 0x40150140, 64 * 1024, 32,  0 },
@@ -248,6 +248,7 @@ static struct chip_info chips_data [] = {
 	{ "GD25Q64CSIG",	0xc8, 0x4017c840, 64 * 1024, 128, 0 },
 	{ "GD25Q128C",		0xc8, 0x40180000, 64 * 1024, 256, 0 },
 	{ "GD25Q128CSIG",	0xc8, 0x4018c840, 64 * 1024, 256, 0 },
+	{ "GD25Q256CSIG",	0xc8, 0x4019c840, 64 * 1024, 512, 1 },
 
 	{ "W25X32VS",		0xef, 0x30160000, 64 * 1024, 64,  0 },
 	{ "W25Q32BV",		0xef, 0x40160000, 64 * 1024, 64,  0 },
@@ -294,10 +295,10 @@ static int bbu_mb_spic_trans(const u8 code, const u32 addr, u8 *buf, const size_
 
 	/* step 1. set opcode & address */
 	if (flash->chip->addr4b) {
-		reg_ctl |= ((code << 24) & SPI_CTL_ADDREXT_MASK);
+		reg_ctl |= (((u32)code << 24) & SPI_CTL_ADDREXT_MASK);
 		reg_opcode = addr;
 	} else {
-		reg_opcode = (code << 24) | (addr & 0xffffff);
+		reg_opcode = ((u32)code << 24) | (addr & 0xffffff);
 	}
 
 	ra_outl(SPI_REG_OPCODE, reg_opcode);
@@ -377,16 +378,16 @@ static int bbu_spic_trans(const u8 code, const u32 addr, u8 *buf, const size_t n
 	reg_ctl &= ~SPI_CTL_TXRXCNT_MASK;
 	reg_ctl &= ~SPI_CTL_ADDREXT_MASK;
 
-	if ((reg_ctl & SPI_CTL_SIZE_MASK) == SPI_CTL_SIZE_MASK)
-		addr4b = 1;
-
 	/* step 1. set opcode & address */
-	if (flash && flash->chip->addr4b && addr4b)
+	if ((reg_ctl & SPI_CTL_SIZE_MASK) == SPI_CTL_SIZE_MASK) {
 		reg_ctl |= (addr & SPI_CTL_ADDREXT_MASK);
+		addr4b = 1;
+	}
 
 	reg_opcode = ((addr & 0xffffff) << 8) | code;
 
-#if defined(RD_MODE_QIOR) || defined(RD_MODE_QOR) || defined(RD_MODE_DIOR) || defined(RD_MODE_DOR) || defined(RD_MODE_FAST)
+#if defined(RD_MODE_QIOR) || defined(RD_MODE_QOR) || \
+    defined(RD_MODE_DIOR) || defined(RD_MODE_DOR) || defined(RD_MODE_FAST)
 	/* clear data bit for dummy bits in Quad/Dual/Fast IO Read */
 	if (flag & SPIC_READ_BYTES)
 		ra_outl(SPI_REG_DATA0, 0);
@@ -410,7 +411,7 @@ static int bbu_spic_trans(const u8 code, const u32 addr, u8 *buf, const size_t n
 #if defined(RD_MODE_QIOR) || defined(RD_MODE_QOR)
 		case 3:
 			reg_opcode &= 0xff;
-			if (flash->chip->addr4b && addr4b) {
+			if (addr4b) {
 				reg_ctl &= ~SPI_CTL_ADDREXT_MASK;
 				reg_ctl |= (*buf << 24);
 				
@@ -423,7 +424,7 @@ static int bbu_spic_trans(const u8 code, const u32 addr, u8 *buf, const size_t n
 #endif
 		case 2:
 			reg_opcode &= 0xff;
-			if (flash->chip->addr4b && addr4b) {
+			if (addr4b) {
 				reg_ctl &= ~SPI_CTL_ADDREXT_MASK;
 				reg_ctl |= (*buf << 24);
 			} else {
@@ -431,7 +432,7 @@ static int bbu_spic_trans(const u8 code, const u32 addr, u8 *buf, const size_t n
 			}
 			break;
 		default:
-			printk("%s: not support write of length %d\n", __func__, n_tx);
+			printk(KERN_ERR "%s: does not support write of length %d\n", __func__, n_tx);
 			return -1;
 		}
 		
@@ -442,10 +443,11 @@ static int bbu_spic_trans(const u8 code, const u32 addr, u8 *buf, const size_t n
 
 	/* step 3. set mosi_byte_cnt */
 	reg_ctl |= (n_rx << 4);
-	if (flash && flash->chip->addr4b && addr4b && n_tx >= 4)
+	if (addr4b && n_tx >= 4)
 		reg_ctl |= (n_tx + 1);
 	else
 		reg_ctl |= n_tx;
+	ra_outl(SPI_REG_CTL, reg_ctl);
 
 	/* step 4. kick */
 	ra_outl(SPI_REG_CTL, reg_ctl | SPI_CTL_START);
@@ -469,7 +471,7 @@ static int bbu_spic_trans(const u8 code, const u32 addr, u8 *buf, const size_t n
 			*buf = (u8)reg_data;
 			break;
 		default:
-			printk("%s:  read of length %d\n", __func__, n_rx);
+			printk(KERN_ERR "%s: read of length %d\n", __func__, n_rx);
 			return -1;
 		}
 	}
@@ -519,7 +521,7 @@ static int raspi_read_devid(u8 *rxbuf, int n_rx)
 
 	retval = bbu_spic_trans(OPCODE_RDID, 0, rxbuf, 1, 4, SPIC_READ_BYTES);
 	if (retval)
-		printk("%s: ret: %x\n", __func__, retval);
+		printk(KERN_ERR "%s: read returned %x\n", __func__, retval);
 
 	return retval;
 }
@@ -563,7 +565,7 @@ static int raspi_set_quad(void)
 			raspi_wait_ready(1);
 			raspi_read_rg(OPCODE_RDCR, &cr);
 			if (reg[1] != cr)
-				printk("warning: set quad failed %x %x\n", reg[1], cr);
+				printk(KERN_WARNING "warning: set quad failed %x %x\n", reg[1], cr);
 		}
 	}
 	else // MXIC
@@ -580,7 +582,7 @@ static int raspi_set_quad(void)
 			raspi_wait_ready(1);
 			raspi_read_sr(&get_sr);
 			if (get_sr != sr)
-				printk("warning: quad sr write failed %x %x %x\n", sr, get_sr, sr2);
+				printk(KERN_WARNING "warning: quad sr write failed %x %x %x\n", sr, get_sr, sr2);
 		}
 	}
 }
@@ -618,7 +620,7 @@ static int raspi_4byte_mode(int enable)
 		raspi_wait_ready(1);
 		raspi_read_rg(OPCODE_BRRD, &br_cfn);
 		if (br_cfn != br) {
-			printk("%s: 4B mode set failed!\n", __func__);
+			printk(KERN_ERR "%s: 4B mode set failed\n", __func__);
 			return -1;
 		}
 	}
@@ -637,7 +639,7 @@ static int raspi_4byte_mode(int enable)
 		}
 		
 		if (retval != 0) {
-			printk("%s: 4B mode set failed!\n", __func__);
+			printk(KERN_ERR "%s: 4B mode set failed\n", __func__);
 			return -1;
 		}
 	}
@@ -674,7 +676,7 @@ static int raspi_unprotect(void)
 	u8 sr_bp, sr = 0;
 
 	if (raspi_read_sr(&sr) < 0) {
-		printk("%s: read_sr fail: %x\n", __func__, sr);
+		printk(KERN_ERR "%s: read failed (%x)\n", __func__, sr);
 		return -1;
 	}
 
@@ -697,40 +699,40 @@ static int raspi_unprotect(void)
 static int raspi_wait_ready(int sleep_ms)
 {
 	int count;
-	int sr = 0;
+	u8 sr = 0;
 
 	/* one chip guarantees max 5 msec wait here after page writes,
 	 * but potentially three seconds (!) after page erase.
 	 */
 	for (count = 0; count < ((sleep_ms+1)*1000*10); count++) {
-		if ((raspi_read_sr((u8 *)&sr)) < 0)
+		if ((raspi_read_sr(&sr)) < 0)
 			break;
 		else if (!(sr & SR_WIP))
 			return 0;
 		udelay(5);
 	}
 
-	printk("%s: read_sr fail: %x\n", __func__, sr);
+	printk(KERN_ERR "%s: read failed (%x)\n", __func__, sr);
 	return -EIO;
 }
 
 static int raspi_wait_sleep_ready(int sleep_ms)
 {
 	int count;
-	int sr = 0;
+	u8 sr = 0;
 
 	/* one chip guarantees max 5 msec wait here after page writes,
 	 * but potentially three seconds (!) after page erase.
 	 */
 	for (count = 0; count < ((sleep_ms+1)*1000); count++) {
-		if ((raspi_read_sr((u8 *)&sr)) < 0)
+		if ((raspi_read_sr(&sr)) < 0)
 			break;
 		else if (!(sr & SR_WIP))
 			return 0;
 		usleep(50);
 	}
 
-	printk("%s: read_sr fail: %x\n", __func__, sr);
+	printk(KERN_ERR "%s: read failed (%x)\n", __func__, sr);
 	return -EIO;
 }
 
@@ -767,7 +769,7 @@ struct chip_info *chip_prob(void)
 	raspi_read_devid(buf, 4);
 	jedec = (u32)((u32)(buf[1] << 24) | ((u32)buf[2] << 16) | ((u32)buf[3] << 8));
 
-	ra_dbg("deice id : %x %x %x %x\n", buf[0], buf[1], buf[2], buf[3]);
+	ra_dbg("device ID: %x %x %x %x\n", buf[0], buf[1], buf[2], buf[3]);
 
 	table_size = ARRAY_SIZE(chips_data);
 
@@ -779,7 +781,7 @@ struct chip_info *chip_prob(void)
 		}
 	}
 
-	printk(KERN_WARNING "unrecognized SPI chip ID: %x (%x), please update the SPI driver!\n",
+	printk(KERN_WARNING "unrecognized SPI chip ID: %x (%x), please update the SPI driver\n",
 		buf[0], jedec);
 
 	/* use last stub item */
@@ -932,7 +934,7 @@ static int ramtd_read(struct mtd_info *mtd, loff_t from, size_t len,
 		rc = bbu_spic_trans(code, from, (buf+rdlen), n_tx, r_part, SPIC_READ_BYTES);
 #endif
 		if (rc != 0) {
-			printk("%s: failed\n", __func__);
+			printk(KERN_ERR "%s: failed\n", __func__);
 			break;
 		}
 		from += r_part;
@@ -1045,8 +1047,8 @@ static int ramtd_write(struct mtd_info *mtd, loff_t to, size_t len,
 				*retlen += rc;
 			if (rc < page_size) {
 				exit_code = -EIO;
-				printk("%s: rc:%x return:%x page_size:%x \n", 
-				       __func__, rc, rc, page_size);
+				printk(KERN_ERR "%s: returned 0x%x, page_size: 0x%x\n",
+				       __func__, rc, page_size);
 				goto exit_mtd_write;
 			}
 		}
@@ -1125,7 +1127,7 @@ static int __init raspi_init(void)
 	raspi_drive_strength();
 #endif
 
-	printk("SPI flash chip: %s (%02x %04x) (%u Kbytes)\n",
+	printk(KERN_INFO "SPI flash chip: %s (%02x %04x) (%u Kbytes)\n",
 	       chip->name, chip->id, chip->jedec_id, (uint32_t)flash->mtd.size / 1024);
 
 #if defined (SPI_DEBUG)
