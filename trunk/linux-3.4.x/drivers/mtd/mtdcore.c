@@ -36,6 +36,9 @@
 #include <linux/idr.h>
 #include <linux/backing-dev.h>
 #include <linux/gfp.h>
+#if defined (CONFIG_RT2880_ROOTFS_IN_FLASH)
+#include <linux/root_dev.h>
+#endif
 
 #include <linux/mtd/mtd.h>
 #include <linux/mtd/partitions.h>
@@ -366,6 +369,15 @@ int add_mtd_device(struct mtd_info *mtd)
 	   of this try_ nonsense, and no bitching about it
 	   either. :) */
 	__module_get(THIS_MODULE);
+
+#if defined (CONFIG_RT2880_ROOTFS_IN_FLASH)
+	// set RootFS automatically when find it
+	if (!strcmp(mtd->name, "RootFS") && ROOT_DEV == 0) {
+		pr_notice("mtd: device %d (%s) set to be root filesystem\n",
+			mtd->index, mtd->name);
+		ROOT_DEV = MKDEV(MTD_BLOCK_MAJOR, mtd->index);
+	}
+#endif
 	return 0;
 
 fail_added:
