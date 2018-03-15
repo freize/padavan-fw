@@ -315,10 +315,6 @@ static int __init rt2880_mtd_init(void)
 	int i, found = 0;
 	uint64_t flash_size = IMAGE1_SIZE;
 	uint32_t kernel_size = 0x150000;
-#if defined (CONFIG_RT2880_ROOTFS_IN_FLASH) && defined (CONFIG_ROOTFS_IN_FLASH_NO_PADDING)
-	char *ptr;
-	_ihdr_t hdr;
-#endif
 
 	if (ra_check_flash_type() != BOOT_FROM_NOR)
 		return 0;
@@ -347,11 +343,17 @@ static int __init rt2880_mtd_init(void)
 	if (ralink_mtd[0])
 		flash_size = ralink_mtd[0]->size;
 #endif
-#if defined (CONFIG_RT2880_ROOTFS_IN_FLASH) && defined (CONFIG_ROOTFS_IN_FLASH_NO_PADDING)
-	ptr = (char *)CKSEG1ADDR(CONFIG_RT2880_MTD_PHYSMAP_START + MTD_KERNEL_PART_OFFSET);
-	memcpy(&hdr, ptr, sizeof(hdr));
-	if (hdr.ih_ksz != 0)
-		kernel_size = ntohl(hdr.ih_ksz);
+#if defined (CONFIG_RT2880_ROOTFS_IN_FLASH)
+	_tplink_ihdr2_t *tplink_hdr = (_tplink_ihdr2_t *)(CKSEG1ADDR(CONFIG_RT2880_MTD_PHYSMAP_START + MTD_KERNEL_PART_OFFSET));
+	if (tplink_hdr->version == 0x3 && memcmp(tplink_hdr->fw_version, "ver. 2.0", 9) == 0) {
+		kernel_size = ntohl(tplink_hdr->kernel_len + tplink_hdr->kernel_ofs);
+	} else {
+#if defined (CONFIG_ROOTFS_IN_FLASH_NO_PADDING)
+	_ihdr_t *hdr = (_ihdr_t *)(CKSEG1ADDR(CONFIG_RT2880_MTD_PHYSMAP_START + MTD_KERNEL_PART_OFFSET));
+	if (hdr->ih_ksz != 0)
+		kernel_size = ntohl(hdr->ih_ksz);
+#endif
+	}
 #endif
 
 	/* calculate partition table */
